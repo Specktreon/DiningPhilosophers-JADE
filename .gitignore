@@ -1,0 +1,17 @@
+﻿# Java compiled binaries
+bin/
+*.class
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.iml
+
+# JADE platform runtime files
+APDescription.txt
+MTPs-*.txt
+*.lock
+
+# OS metadata
+Thumbs.db
+.DS_Store

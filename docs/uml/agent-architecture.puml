@@ -1,0 +1,139 @@
+@startuml agent-architecture
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam roundCorner 8
+skinparam shadowing false
+skinparam classBorderColor #334155
+skinparam classBackgroundColor #F8FAFC
+skinparam classHeaderBackgroundColor #E2E8F0
+
+title Dining Philosophers MAS — Component & Architecture Class Diagram
+
+package "Bootstrap & Platform" {
+    class Main {
+        + {static} main(args: String[])
+        - {static} findFreePort(): int
+        - {static} printBanner(numPhilosophers: int, enableGui: boolean)
+    }
+}
+
+package "JADE Multi-Agent System" {
+    abstract class "jade.core.Agent" as Agent {
+        # setup()
+        # takeDown()
+        + send(msg: ACLMessage)
+        + receive(): ACLMessage
+        + receive(pattern: MessageTemplate): ACLMessage
+        + blockingReceive(): ACLMessage
+    }
+
+    abstract class "jade.core.behaviours.CyclicBehaviour" as CyclicBehaviour {
+        + {abstract} action()
+        + block()
+    }
+
+    class EnvironmentAgent {
+        - numPhilosophers: int
+        - forkInUse: boolean[]
+        - forkOwner: int[]
+        - mealsCount: int[]
+        - forkQueues: List<ForkWaitingRequest>[]
+        - {static} isPaused: boolean
+        # setup()
+        - handleRequestFork(msg: ACLMessage)
+        - handleReleaseFork(msg: ACLMessage)
+        - handleStartedEating(msg: ACLMessage)
+        - selectBestWaitingRequest(queue: List): ForkWaitingRequest
+    }
+
+    class "EnvironmentAgent.ResourceAllocationBehaviour" as ResourceAllocationBehaviour {
+        + action()
+    }
+
+    class PhilosopherAgent {
+        - id: int
+        - totalPhilosophers: int
+        - philosopherName: String
+        - leftFork: int
+        - rightFork: int
+        - firstFork: int
+        - secondFork: int
+        - hunger: int
+        - mealsEaten: int
+        # setup()
+        + getPriorityLevel(): String
+        - sendForkRequest(forkId: int)
+        - sendForkRelease(forkId: int)
+        - waitForForkGrant(expectedForkId: int)
+        - checkAndBroadcastPriority()
+        - processIncomingPriorityMessages()
+        - simulateThinking(minMs: int, maxMs: int)
+        - simulateEating(minMs: int, maxMs: int)
+    }
+
+    class "PhilosopherAgent.PhilosopherLifecycleBehaviour" as PhilosopherLifecycleBehaviour {
+        + action()
+    }
+}
+
+package "Observer & User Interface" {
+    interface TableStateListener <<interface>> {
+        + onPhilosopherStateChanged(philId: int, state: String)
+        + onForkStateChanged(forkId: int, inUse: boolean, ownerId: int)
+        + onHungerChanged(philId: int, hunger: int, priority: String)
+        + onMealCompleted(philId: int, totalMeals: int)
+        + onLogEvent(event: String)
+    }
+
+    class DiningPhilosophersGUI {
+        - numPhilosophers: int
+        - philosopherNames: String[]
+        - philosopherStates: String[]
+        - philosopherHunger: int[]
+        - philosopherPriority: String[]
+        - forkInUse: boolean[]
+        - forkOwner: int[]
+        + captureSnapshot(file: File)
+    }
+}
+
+' Inheritance
+Agent <|-- EnvironmentAgent
+Agent <|-- PhilosopherAgent
+CyclicBehaviour <|-- ResourceAllocationBehaviour
+CyclicBehaviour <|-- PhilosopherLifecycleBehaviour
+
+' Nesting / Composition
+EnvironmentAgent *-- ResourceAllocationBehaviour : contains
+PhilosopherAgent *-- PhilosopherLifecycleBehaviour : contains
+
+' Deployment / Spawning
+Main ..> EnvironmentAgent : creates & spawns\nvia AgentContainer
+Main ..> PhilosopherAgent : creates & spawns N agents\nvia AgentContainer
+Main ..> DiningPhilosophersGUI : instantiates\n(if GUI enabled)
+
+' FIPA-ACL Messaging
+PhilosopherAgent <--> EnvironmentAgent : JADE ACL Messages\n[conv-id: "dining-philosophers"]\n(REQUEST, AGREE, INFORM)
+
+PhilosopherAgent <--> PhilosopherAgent : Peer-to-Peer Priority Broadcast\n[conv-id: "hunger-priority"]\n(INFORM)
+
+' Decoupled Observer Pattern
+TableStateListener <|.. DiningPhilosophersGUI : implements
+EnvironmentAgent o--> TableStateListener : notifies events
+PhilosopherAgent o--> TableStateListener : notifies state & hunger
+
+note bottom of DiningPhilosophersGUI
+  **Decoupled Observer:**
+  GUI only visualizes the simulation state.
+  It does NOT control fork allocation,
+  agent behaviors, or synchronization.
+end note
+
+note right of PhilosopherAgent
+  **Dijkstra Resource Ordering:**
+  firstFork = min(leftFork, rightFork)
+  secondFork = max(leftFork, rightFork)
+  Forks requested **ONE AT A TIME**.
+end note
+
+@enduml

@@ -1,0 +1,84 @@
+@startuml deadlock-prevention
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam roundCorner 8
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam noteBackgroundColor #FEF9C3
+skinparam noteBorderColor #CA8A04
+skinparam participantBorderColor #334155
+skinparam participantBackgroundColor #F1F5F9
+
+title Dijkstra's Resource Hierarchy — Mathematical Deadlock Freedom
+
+participant "Philosopher-0\n(Socrates)\nleft=0, right=1" as P0 #EFF6FF
+participant "EnvironmentAgent\n(Resource Authority)" as Env #F0FDF4
+participant "Philosopher-4 (Last)\n(Kant)\nleft=4, right=0" as P4 #EFF6FF
+
+autonumber
+
+== 1. Resource Hierarchy Ordering: min(left, right) then max(left, right) ==
+note over P0
+  **Socrates (ID: 0):**
+  firstFork  = min(0, 1) = **Fork 0**
+  secondFork = max(0, 1) = **Fork 1**
+end note
+
+note over P4
+  **Kant (ID: 4 - Last Philosopher):**
+  firstFork  = min(4, 0) = **Fork 0**  <-- SYMMETRY BREAK!
+  secondFork = max(4, 0) = **Fork 4**
+end note
+
+== 2. Both Compete for Fork 0 as Their FIRST Fork ==
+P0 -> Env : **ACL: REQUEST**\nreply-with: "req-p0-f0"\ncontent: ""FORK_REQUEST:0"" [firstFork]
+activate Env
+P4 -> Env : **ACL: REQUEST**\nreply-with: "req-p4-f0"\ncontent: ""FORK_REQUEST:0"" [firstFork]
+
+note over Env
+  Both P0 and P4 compete for **Fork 0** as their first resource.
+  Fork 0 is granted to P0 (Socrates).
+  P4 (Kant) is queued with **WAIT:0**.
+end note
+
+Env --> P0 : **ACL: AGREE**\nin-reply-to: "req-p0-f0"\ncontent: ""FORK_GRANTED:0""
+Env --> P4 : **ACL: INFORM**\nin-reply-to: "req-p4-f0"\ncontent: ""WAIT:0""
+deactivate Env
+
+note over P4
+  **Crucial Invariant:**
+  Kant holds **ZERO** forks while waiting for Fork 0.
+  Kant cannot hold Fork 4 and wait for Fork 0!
+end note
+
+== 3. Progress Guarantee & No Circular Wait ==
+P0 -> Env : **ACL: REQUEST**\nreply-with: "req-p0-f1"\ncontent: ""FORK_REQUEST:1"" [secondFork]
+activate Env
+Env --> P0 : **ACL: AGREE**\nin-reply-to: "req-p0-f1"\ncontent: ""FORK_GRANTED:1""
+deactivate Env
+
+note over P0
+  P0 holds both forks (0, 1) and **EATS**.
+  Deadlock is impossible because circular wait is broken.
+end note
+
+P0 -> Env : **ACL: INFORM**\ncontent: ""RELEASE_FORK:0:0""
+activate Env
+note over Env
+  Fork 0 is released!
+  Now granted to queued P4 (Kant).
+end note
+Env --> P4 : **ACL: AGREE**\ncontent: ""FORK_GRANTED:0""
+deactivate Env
+
+note over P0, P4
+  **Theorem (Dijkstra):**
+  All philosophers acquire forks in global ascending resource order:
+  min(left, right) -> max(left, right)
+  
+  At most N-1 philosophers can acquire their first fork simultaneously.
+  The resource dependency graph is a Directed Acyclic Graph (DAG).
+  Therefore, circular wait and deadlock cannot occur.
+end note
+
+@enduml

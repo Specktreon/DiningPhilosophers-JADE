@@ -1,0 +1,113 @@
+@startuml dining-communication
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam roundCorner 8
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam noteBackgroundColor #FEF9C3
+skinparam noteBorderColor #CA8A04
+skinparam participantBorderColor #334155
+skinparam participantBackgroundColor #F1F5F9
+
+title Complete Dining Cycle — JADE ACL Communication Protocol
+
+participant "PhilosopherAgent\n(Philosopher-0: Socrates)" as Phil #EFF6FF
+participant "EnvironmentAgent\n(Resource Authority)" as Env #F0FDF4
+participant "DiningPhilosophersGUI\n(TableStateListener)" as GUI #FFFBEB
+
+autonumber
+
+== Phase 1: Thinking & Dijkstra Fork Calculation ==
+note over Phil
+  State: **Thinking**
+  Hunger increases dynamically (+2/slice).
+  firstFork  = min(leftFork, rightFork) = Fork 0
+  secondFork = max(leftFork, rightFork) = Fork 1
+end note
+
+Phil -> GUI : onPhilosopherStateChanged(0, "Thinking")
+
+== Phase 2: Requesting First Fork (One-Fork-at-a-Time) ==
+Phil -> GUI : onPhilosopherStateChanged(0, "Waiting for Fork 0")
+
+Phil -> Env : **ACL: REQUEST**\nconv-id: "dining-philosophers"\nreply-with: "fork-req-0-0"\ncontent: ""FORK_REQUEST:0""
+activate Env
+
+note over Env
+  Checks Fork 0 status:
+  Fork 0 is **FREE**.
+  forkInUse[0] = true, forkOwner[0] = 0
+end note
+
+Env --> Phil : **ACL: AGREE**\nconv-id: "dining-philosophers"\nin-reply-to: "fork-req-0-0"\ncontent: ""FORK_GRANTED:0""
+deactivate Env
+
+Env -> GUI : onForkStateChanged(0, inUse=true, owner=0)
+Phil -> GUI : onPhilosopherStateChanged(0, "Holding Fork 0")
+note over Phil
+  State: **Holding Fork 0**
+  Physical pickup delay (300-500ms)
+end note
+
+== Phase 3: Requesting Second Fork (One-Fork-at-a-Time) ==
+Phil -> GUI : onPhilosopherStateChanged(0, "Waiting for Fork 1")
+
+Phil -> Env : **ACL: REQUEST**\nconv-id: "dining-philosophers"\nreply-with: "fork-req-0-1"\ncontent: ""FORK_REQUEST:1""
+activate Env
+
+note over Env
+  Checks Fork 1 status:
+  Fork 1 is **FREE**.
+  forkInUse[1] = true, forkOwner[1] = 0
+end note
+
+Env --> Phil : **ACL: AGREE**\nconv-id: "dining-philosophers"\nin-reply-to: "fork-req-0-1"\ncontent: ""FORK_GRANTED:1""
+deactivate Env
+
+Env -> GUI : onForkStateChanged(1, inUse=true, owner=0)
+
+== Phase 4: Eating (Both Forks Secured) ==
+Phil -> GUI : onPhilosopherStateChanged(0, "Eating")
+
+Phil -> Env : **ACL: INFORM**\nconv-id: "dining-philosophers"\ncontent: ""STARTED_EATING:0""
+activate Env
+Env -> GUI : onMealCompleted(0, totalMeals)
+deactivate Env
+
+note over Phil
+  State: **Eating**
+  Both forks (0, 1) held.
+  Spaghetti plate animated on GUI.
+  Hunger drains back to 0.
+end note
+
+== Phase 5: Releasing Forks Separately ==
+note over Phil
+  Finished eating.
+  Releases forks **individually**.
+end note
+
+Phil -> Env : **ACL: INFORM**\nconv-id: "dining-philosophers"\ncontent: ""RELEASE_FORK:0:0""
+activate Env
+note over Env
+  forkInUse[0] = false
+  Wakes prioritized waiter if queued.
+end note
+Env -> GUI : onForkStateChanged(0, inUse=false, owner=-1)
+deactivate Env
+
+Phil -> Env : **ACL: INFORM**\nconv-id: "dining-philosophers"\ncontent: ""RELEASE_FORK:0:1""
+activate Env
+note over Env
+  forkInUse[1] = false
+  Wakes prioritized waiter if queued.
+end note
+Env -> GUI : onForkStateChanged(1, inUse=false, owner=-1)
+deactivate Env
+
+note over Phil
+  Hunger reset to 0 (LOW Priority).
+  Cycles back to **Thinking**.
+end note
+
+@enduml

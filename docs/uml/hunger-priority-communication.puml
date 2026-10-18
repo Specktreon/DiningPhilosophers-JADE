@@ -1,0 +1,81 @@
+@startuml hunger-priority-communication
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam roundCorner 8
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam noteBackgroundColor #FEF9C3
+skinparam noteBorderColor #CA8A04
+skinparam participantBorderColor #334155
+skinparam participantBackgroundColor #F1F5F9
+
+title Hunger / Priority Peer-to-Peer Communication & Priority Scheduling
+
+participant "PhilosopherAgent\n(Philosopher-2: Aristotle)" as P2 #EFF6FF
+participant "PhilosopherAgent\n(Philosopher-1: Plato)" as P1 #EFF6FF
+participant "EnvironmentAgent\n(Resource Authority)" as Env #F0FDF4
+
+autonumber
+
+== 1. Dynamic Hunger Accumulation & Priority Trigger ==
+note over P2
+  Aristotle waiting/thinking.
+  Hunger reaches **78 >= 75** (HIGH Priority).
+  Triggers **checkAndBroadcastPriority()**.
+end note
+
+== 2. Peer-to-Peer ACL Priority Broadcast ==
+P2 -> P1 : **ACL: INFORM**\nconv-id: "hunger-priority"\ncontent: ""HUNGER_PRIORITY:id=2:name=Aristotle:hunger=78:priority=HIGH""
+activate P1
+
+note over P1
+  Receives message via
+  **MessageTemplate.MatchConversationId("hunger-priority")**.
+  Registers Aristotle's high priority.
+end note
+
+P1 --> P2 : **ACL: INFORM (Reply)**\nconv-id: "hunger-priority"\ncontent: ""PRIORITY_ACK:id=1:name=Plato""
+deactivate P1
+
+== 3. Contention for Shared Resource (Fork 2) ==
+note over Env
+  Fork 2 is currently **occupied** (e.g., held by Socrates).
+end note
+
+P1 -> Env : **ACL: REQUEST**\nconv-id: "dining-philosophers"\nreply-with: "req-p1-f2"\ncontent: ""FORK_REQUEST:2""
+activate Env
+Env --> P1 : **ACL: INFORM**\nin-reply-to: "req-p1-f2"\ncontent: ""WAIT:2""\n[Enqueued in forkQueues[2], Hunger=32]
+deactivate Env
+
+P2 -> Env : **ACL: REQUEST**\nconv-id: "dining-philosophers"\nreply-with: "req-p2-f2"\ncontent: ""FORK_REQUEST:2""
+activate Env
+Env --> P2 : **ACL: INFORM**\nin-reply-to: "req-p2-f2"\ncontent: ""WAIT:2""\n[Enqueued in forkQueues[2], Hunger=78]
+deactivate Env
+
+== 4. Environment Priority Resolution with Aging ==
+note over Env
+  Holder releases Fork 2 (""RELEASE_FORK"").
+  Environment invokes **selectBestWaitingRequest(forkQueues[2])**:
+  
+  **Effective Priority Formula:**
+  ""effectivePriority = initialHunger + (waitSeconds * 8.0)""
+  
+  - Aristotle (P2): ""78 + (1.2 * 8.0) = 87.6""  -> **HIGHEST**
+  - Plato (P1):     ""32 + (2.5 * 8.0) = 52.0""
+end note
+
+Env --> P2 : **ACL: AGREE**\nconv-id: "dining-philosophers"\nin-reply-to: "req-p2-f2"\ncontent: ""FORK_GRANTED:2""
+activate P2
+note over P2
+  Aristotle receives Fork 2 first
+  due to high priority!
+end note
+deactivate P2
+
+note over P1
+  **Starvation Prevention Guarantee:**
+  Plato's effective priority continues increasing (+8.0/sec).
+  Plato will be served next once Fork 2 is released.
+end note
+
+@enduml
